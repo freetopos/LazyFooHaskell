@@ -23,28 +23,40 @@
 module Main where
 
 import Data.Word
-import Data.Array.IArray
-import Monad
+
 import Control.Monad
-import Control.Applicative
+import Control.Monad.State
+import Control.Monad.Reader
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
-import Graphics.UI.SDL.Color
 import Graphics.UI.SDL.Image
 
+import Graphics.UI.SDL.TTF
 import qualified Graphics.UI.SDL.TTF.General as TTFG
-import Graphics.UI.SDL.TTF.Management
-import Graphics.UI.SDL.TTF.Render
 
-screenWidth		=	640
-screenHeight	=	480
-screenBpp		=	32
+data MessageDir = MessageDir
+	{
+		upMessage :: Surface,
+		downMessage :: Surface,
+		leftMessage :: Surface,
+		rightmessage :: Surface
+	}
+
+data AppConfig = AppConfig
+	{
+		screen :: Surface,
+		background :: Surface,
+		messageDir :: MessageDir,
+		screenWidth :: Int,
+		screenHeight :: Int,
+		screenBpp :: Int
+	}
+
+type AppState = StateT (Maybe Surface) IO
+type AppEnv = ReaderT AppConfig AppState
+
+runLoop :: AppConfig -> IO ()
+runLoop config = (evalStateT . runReaderT loop) config Nothing
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
@@ -56,62 +68,83 @@ applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
 	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-		result <- TTFG.init
-		if not result
-			then do
-				putStr "Failed to init ttf\n"
-				return ()
-			else do
-				screen	<-	setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
-				setCaption "Press an Arrow Key" []
-				
-				background		<-	loadImage "background.png" (Just (0x00, 0xff, 0xff))
-				font			<-	openFont "lazy.ttf" 72
-				
-				upMessage		<-	renderTextSolid font "Up was pressed" textColor
-				downMessage		<-	renderTextSolid font "Down was pressed" textColor
-				leftMessage		<-	renderTextSolid font "Left was pressed" textColor
-				rightmessage	<-	renderTextSolid font "Right was pressed" textColor
-				
-				let handleEvent event =
-					case event of
-						(KeyDown (Keysym key _ _))	->
-							case key of
-								SDLK_UP		->	Just upMessage
-								SDLK_DOWN	->	Just downMessage
-								SDLK_LEFT	->	Just leftMessage
-								SDLK_RIGHT	->	Just rightmessage
-								_			->	Nothing
-						_	->	Nothing
-				
-		 		let renderMsg msg =					
-					case msg of
-						Nothing			->	return ()	
-						Just message	->	applySurface 0 0 background screen Nothing >> applySurface ((screenWidth - surfaceGetWidth message) `div` 2) ((screenHeight - surfaceGetHeight message) `div` 2) message screen Nothing >> return ()
-				
-				let render msg = renderMsg msg >> Graphics.UI.SDL.flip screen
-				
-				let loop currMsg =
-					do
-						event	<-	pollEvent
-						let nextMessage	=	case (handleEvent event) of
-												Nothing -> currMsg
-												rest -> rest
+initEnv :: IO AppConfig
+initEnv = do
+	screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+	setCaption "Press an Arrow Key" []
+	
+	background		<-	loadImage "background.png" $ Just (0x00, 0xff, 0xff)
+	font			<-	openFont "lazy.ttf" 72
+	
+	upMessage		<-	renderTextSolid font "Up was pressed" textColor
+	downMessage		<-	renderTextSolid font "Down was pressed" textColor
+	leftMessage		<-	renderTextSolid font "Left was pressed" textColor
+	rightmessage	<-	renderTextSolid font "Right was pressed" textColor
+	
+	applySurface 0 0 background screen Nothing
+	
+	let msgDir		=	MessageDir upMessage downMessage leftMessage rightmessage
+	return $ AppConfig screen background msgDir screenWidth screenHeight screenBpp
+ where
+ 	textColor		=	Color 0 0 0
+	screenWidth		=	640
+	screenHeight	=	480
+	screenBpp		=	32
+
+loop :: AppEnv ()
+loop = do
+	
+	quit 			<-	whileEvents
+	
+	screen			<-	fmap screen ask
+	background		<-	fmap background ask
+	screenWidth		<-	fmap screenWidth ask
+	screenHeight	<-	fmap screenHeight ask
+	msg				<-	get
+	
+	case msg of
+		Nothing -> return ()
+		Just message -> do
+			applySurface' 0 0 background screen Nothing
+			applySurface' ((screenWidth - surfaceGetWidth message) `div` 2) ((screenHeight - surfaceGetHeight message) `div` 2) message screen Nothing
+			put Nothing			
+	
+	liftIO $ Graphics.UI.SDL.flip screen
+	
+	unless quit loop
+	
+ where
+ 	applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
+ 	
+whileEvents :: AppEnv Bool
+whileEvents = do
+	mdir	<-	fmap messageDir ask
+	event	<-	liftIO pollEvent
+	case event of
+		Quit	->	return True
+		(KeyDown (Keysym key _ _))	-> do
+			
+			case key of
+				SDLK_UP		->	put $ Just $ upMessage mdir
+				SDLK_DOWN	->	put $ Just $ downMessage mdir
+				SDLK_LEFT	->	put $ Just $ leftMessage mdir
+				SDLK_RIGHT	->	put $ Just $ rightmessage mdir
+				_			->	put Nothing
+			return False
+		NoEvent	->	return False
+		_		->	whileEvents
+
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
+
+	result <- TTFG.init
+	if not result
+		then do
+			putStr "Failed to init ttf\n"
+			return ()
+		else do
+		
+			env	<-	initEnv
+			
+			runLoop env
 						
-						case event of
-							Quit	->	return ()
-							NoEvent	->	render nextMessage >> loop Nothing  
-							_		->	loop nextMessage
-				
-				applySurface 0 0 background screen Nothing
-				
-				loop Nothing
-				
-				closeFont font
-				TTFG.quit
-				quit
-	where
-		textColor	=	Color 0 0 0
+			TTFG.quit

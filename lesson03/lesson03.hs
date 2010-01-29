@@ -24,11 +24,6 @@ module Main where
 
 import Graphics.UI.SDL.Image
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
 
 loadImage :: String -> IO Surface
 loadImage filename = load filename >>= displayFormat
@@ -37,9 +32,8 @@ applySurface :: Int -> Int -> Surface -> Surface -> IO Bool
 applySurface x y src dst = blitSurface src Nothing dst offset
 	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
+		
 		screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
 		setCaption "PNG test" []
 		
@@ -51,7 +45,7 @@ main =
 		
 		delay 2000
 	where
-		screenWidth	=	649
+		screenWidth		=	649
 		screenHeight	=	480
-		screenBpp	=	32
+		screenBpp		=	32
 

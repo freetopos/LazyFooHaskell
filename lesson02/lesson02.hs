@@ -23,36 +23,26 @@
 module Main where
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
 
 loadImage :: String -> IO Surface
 loadImage filename = loadBMP filename >>= displayFormat
-{-	do
-		loadedImage		<-	loadBMP filename
-		optimizedImage	<-	displayFormat loadedImage
-		
-		return optimizedImage 
--}
 
 applySurface :: Int -> Int -> Surface -> Surface -> IO Bool
 applySurface x y src dst = blitSurface src Nothing dst offset
 	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-main =
-	do
-	
-		Graphics.UI.SDL.General.init [InitEverything]
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
+		
 		screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
 		setCaption "Hello World" []
 		
-		message		<-	loadImage helloWorldPath
-		background	<-	loadImage backgroundPath
+		message		<-	loadImage "hello.bmp"
+		background	<-	loadImage "background.bmp"
 		
 		applySurface 0 0 background screen
+		applySurface 320 0 background screen
+		applySurface 0 240 background screen
+		applySurface 320 240 background screen
 		
 		applySurface 180 140 message screen
 		
@@ -61,8 +51,6 @@ main =
 		delay 2000
 		
 	where
-		helloWorldPath	=	"hello_world.bmp"
-		backgroundPath	=	"background.bmp"
-		screenWidth	=	649
+		screenWidth		=	649
 		screenHeight	=	480
-		screenBpp	=	32
+		screenBpp		=	32

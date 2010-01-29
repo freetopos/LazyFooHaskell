@@ -23,28 +23,14 @@
 module Main where
 
 import Data.Word
-import Data.Array.IArray
-import Monad
 import Control.Monad
-import Control.Applicative
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
-import Graphics.UI.SDL.Color
 import Graphics.UI.SDL.Image
 
 import qualified Graphics.UI.SDL.TTF.General as TTFG
 import Graphics.UI.SDL.TTF.Management
 import Graphics.UI.SDL.TTF.Render
-
-screenWidth		=	640
-screenHeight	=	480
-screenBpp		=	32
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
@@ -56,41 +42,42 @@ applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
 	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
--- when <$> TTFG.init >>= return ()
---		fillRect screen <$> (Just <$> getClipRect screen) <*> ((mapRGB . surfaceGetPixelFormat) screen 0xff 0xff 0xff)
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-		result <- TTFG.init
-		if not result
-			then do
-				putStr "Failed to init ttf\n"
-				return ()
-			else do
-				screen	<-	setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
-				setCaption "TTF Test" []
-				
-				background	<-	loadImage "background.png" (Just (0x00, 0xff, 0xff))
-				font		<-	openFont "lazy.ttf" 28
-				message		<-	renderTextSolid font "The quick brown fox jumps over the lazy hound" textColor
-				
-				applySurface 0 0 background screen Nothing
-				applySurface 0 200 message screen Nothing
-										
-				Graphics.UI.SDL.flip screen		
-						
-				loop ()
-				
-				closeFont font
-				TTFG.quit
-				quit
-	where
-		loop ()	=
-			do
-				event	<-	pollEvent
-				case event of
-					Quit	->	return ()
-					NoEvent	->	pure id >>= \_ -> loop ()
-					_		->	loop ()
-		textColor	=	Color 255 255 255
+	result <- TTFG.init
+	if not result
+		then do
+			putStr "Failed to init ttf\n"
+			return ()
+		else do
+			screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+			setCaption "TTF Test" []
+			
+			background	<-	loadImage "background.png" (Just (0x00, 0xff, 0xff))
+			font		<-	openFont "lazy.ttf" 28
+			message		<-	renderTextSolid font "The quick brown fox jumps over the lazy hound" textColor
+			
+			applySurface 0 0 background screen Nothing
+			applySurface 0 200 message screen Nothing
+									
+			Graphics.UI.SDL.flip screen		
+					
+			loop
+			
+			TTFG.quit
+ where
+ 	textColor		=	Color 255 255 255
+	screenWidth		=	640
+	screenHeight	=	480
+	screenBpp		=	32
+	
+	loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
+		quit <- whileEvents
+		unless quit loop
+	
+	whileEvents = do
+		event	<-	pollEvent
+		case event of
+			Quit	->	return True
+			NoEvent	->	return False
+			_		->	whileEvents

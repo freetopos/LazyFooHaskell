@@ -22,15 +22,8 @@
 -}
 module Main where
 
-import Control.Applicative
-
+import Control.Monad
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
 import Graphics.UI.SDL.Image
 
 loadImage :: String -> IO Surface
@@ -38,43 +31,34 @@ loadImage filename = load filename >>= displayFormat
 
 applySurface :: Int -> Int -> Surface -> Surface -> IO Bool
 applySurface x y src dst = blitSurface src Nothing dst offset
-	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
+ where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-		screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
-		setCaption "Event test" []
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
 		
-		image		<-	loadImage "x.png"
+	screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+	
+	setCaption "Event test" []
+	
+	image		<-	loadImage "x.png"
+	
+	applySurface 0 0 image screen
+	
+	Graphics.UI.SDL.flip screen	
+	
+	loop
 		
-		applySurface 0 0 image screen
-		
-		Graphics.UI.SDL.flip screen		
-		
-		loop ()
-		
-		quit
-		
-	where
-		screenWidth		=	640
-		screenHeight	=	480
-		screenBpp		=	32
-		
-		loop ()	=
-			do
-				event	<-	pollEvent
-				case event of
-					Quit	->	return ()
-					NoEvent	->	pure id >>= \_ -> loop ()
-					_		->	loop ()
-
-{-
-foo () = ()
-handleEvents False	=	return ()
-handleEvents True	=	handleEvent <$> pollEvent >>= handleEvents
-
-handleEvent NoEvent	=	loop True
-handleEvent Quit	=	False
-handleEvent	_		=	True
--}
+ where
+	screenWidth		=	640
+	screenHeight	=	480
+	screenBpp		=	32
+	
+	loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
+		quit <- whileEvents
+		unless quit loop
+	
+	whileEvents = do
+		event	<-	pollEvent
+		case event of
+			Quit	->	return True
+			NoEvent	->	return False
+			_		->	whileEvents

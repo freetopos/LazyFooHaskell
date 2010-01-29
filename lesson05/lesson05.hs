@@ -23,17 +23,11 @@
 module Main where
 
 import Data.Word
-
-import Control.Applicative
+import Control.Monad
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
 import Graphics.UI.SDL.Image
+
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
@@ -45,33 +39,33 @@ applySurface :: Int -> Int -> Surface -> Surface -> IO Bool
 applySurface x y src dst = blitSurface src Nothing dst offset
 	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-		screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
-		setCaption "Foo says \"Hello!\"" []
-		
-		background	<-	loadImage "background.png" Nothing--(Just (0x00, 0xff, 0xff))
-		foo		<-	loadImage "foo.png" (Just (0x00, 0xff, 0xff))
-		
-		applySurface 0 0 background screen
-		applySurface 240 190 foo screen
-		
-		Graphics.UI.SDL.flip screen		
-		
-		loop ()
-		
-		quit
-		
-	where
-		screenWidth	=	640
-		screenHeight	=	480
-		screenBpp	=	32
-		
-		loop ()	=
-			do
-				event	<-	pollEvent
-				case event of
-					Quit	->	return ()
-					NoEvent	->	pure id >>= \_ -> loop ()
-					_		->	loop ()
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
+
+	screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+	setCaption "Foo says \"Hello!\"" []
+	
+	background	<-	loadImage "background.png" Nothing--(Just (0x00, 0xff, 0xff))
+	foo			<-	loadImage "foo.png" (Just (0x00, 0xff, 0xff))
+	
+	applySurface 0 0 background screen
+	applySurface 240 190 foo screen
+	
+	Graphics.UI.SDL.flip screen		
+	
+	loop
+	
+ where
+	screenWidth		=	640
+	screenHeight	=	480
+	screenBpp		=	32
+	
+	loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
+		quit <- whileEvents
+		unless quit loop
+	
+	whileEvents = do
+		event	<-	pollEvent
+		case event of
+			Quit	->	return True
+			NoEvent	->	return False
+			_		->	whileEvents
