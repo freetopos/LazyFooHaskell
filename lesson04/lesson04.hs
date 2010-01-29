@@ -31,34 +31,34 @@ loadImage filename = load filename >>= displayFormat
 
 applySurface :: Int -> Int -> Surface -> Surface -> IO Bool
 applySurface x y src dst = blitSurface src Nothing dst offset
- where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
+ where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
 main = withInit [InitEverything] $ do -- withInit calls quit for us.
 		
-	screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
-	
-	setCaption "Event test" []
-	
-	image		<-	loadImage "x.png"
-	
-	applySurface 0 0 image screen
-	
-	Graphics.UI.SDL.flip screen	
-	
-	loop
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+    
+    setCaption "Event test" []
+    
+    image <- loadImage "x.png"
+    
+    applySurface 0 0 image screen
+    
+    Graphics.UI.SDL.flip screen	
+    
+    loop
 		
  where
-	screenWidth		=	640
-	screenHeight	=	480
-	screenBpp		=	32
-	
-	loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
-		quit <- whileEvents
-		unless quit loop
-	
-	whileEvents = do
-		event	<-	pollEvent
-		case event of
-			Quit	->	return True
-			NoEvent	->	return False
-			_		->	whileEvents
+    screenWidth  = 640
+    screenHeight = 480
+    screenBpp    = 32
+
+    loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
+        quit <- whileEvents
+        unless quit loop
+    
+    whileEvents = do
+        event <- pollEvent
+        case event of
+            Quit    -> return True
+            NoEvent -> return False
+            _       -> whileEvents

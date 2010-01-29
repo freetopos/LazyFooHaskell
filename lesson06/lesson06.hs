@@ -34,50 +34,49 @@ import Graphics.UI.SDL.Image
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
 
-setColorKey' Nothing s =	return s
-setColorKey' (Just (r, g, b)) surface	=	(mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
+setColorKey' Nothing s = return s
+setColorKey' (Just (r, g, b)) surface = (mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
 
 applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
-	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
+ where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
 main = withInit [InitEverything] $ do -- withInit calls quit for us.
-	
-	screen	<-	setVideoMode screenWidth screenHeight screenBpp [SWSurface]
-	setCaption "Split the dots" []
-	
-	dots		<-	loadImage "dots.png" (Just (0x00, 0xff, 0xff))
-			
-	bgColor		<-	(mapRGB . surfaceGetPixelFormat) screen 0xff 0xff 0xff
-	clipRect	<-	Just <$> (getClipRect screen)
-	fillRect screen clipRect bgColor
-			
-	applySurface 0 0 dots screen $ clips ! 0
-	applySurface 540 0 dots screen $ clips ! 1
-	applySurface 0 380 dots screen $ clips ! 2
-	applySurface 540 380 dots screen $ clips ! 3
-	
-	Graphics.UI.SDL.flip screen		
-	
-	loop
-	
+    
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+    setCaption "Split the dots" []
+    
+    dots     <- loadImage "dots.png" (Just (0x00, 0xff, 0xff))
+    bgColor  <- (mapRGB . surfaceGetPixelFormat) screen 0xff 0xff 0xff
+    clipRect <- Just <$> (getClipRect screen)
+    fillRect screen clipRect bgColor
+    		
+    applySurface 0 0 dots screen $ clips ! 0
+    applySurface 540 0 dots screen $ clips ! 1
+    applySurface 0 380 dots screen $ clips ! 2
+    applySurface 540 380 dots screen $ clips ! 3
+    
+    Graphics.UI.SDL.flip screen		
+    
+    loop
+    
  where
-	clips	=	listArray (0, 3) [	Just $ Rect { rectX=0, rectY=0, rectW=100, rectH=100 },
-									Just $ Rect { rectX=100, rectY=0, rectW=100, rectH=100 },
-									Just $ Rect { rectX=0, rectY=100, rectW=100, rectH=100 },
-									Just $ Rect { rectX=100, rectY=100, rectW=100, rectH=100 }] :: Array Int (Maybe Rect)
-	screenWidth		=	640
-	screenHeight	=	480
-	screenBpp		=	32
-	
-	loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
-		quit <- whileEvents
-		unless quit loop
-	
-	whileEvents = do
-		event	<-	pollEvent
-		case event of
-			Quit	->	return True
-			NoEvent	->	return False
-			_		->	whileEvents
-	
+    clips = listArray (0, 3) [	Just $ Rect { rectX=0, rectY=0, rectW=100, rectH=100 },
+                                Just $ Rect { rectX=100, rectY=0, rectW=100, rectH=100 },
+                                Just $ Rect { rectX=0, rectY=100, rectW=100, rectH=100 },
+                                Just $ Rect { rectX=100, rectY=100, rectW=100, rectH=100 }] :: Array Int (Maybe Rect)
+    screenWidth  = 640
+    screenHeight = 480
+    screenBpp    = 32
+
+    loop = do -- or whileEvents >>= (Prelude.flip unless) loop 
+        quit <- whileEvents
+        unless quit loop
+
+    whileEvents = do
+        event <- pollEvent
+        case event of
+            Quit    -> return True
+            NoEvent -> return False
+            _       -> whileEvents
+
