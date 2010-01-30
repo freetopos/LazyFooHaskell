@@ -22,110 +22,144 @@
 -}
 module Main where
 
-import Data.Word
-import Data.Array.IArray
-import Monad
+import Control.Applicative
 import Control.Monad
 import Control.Monad.State
-import Control.Applicative
+import Control.Monad.Reader
+
+import Data.Word
+import Data.Array.IArray
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
-import Graphics.UI.SDL.Color
 import Graphics.UI.SDL.Image
-
+import Graphics.UI.SDL.TTF
 import qualified Graphics.UI.SDL.TTF.General as TTFG
-import Graphics.UI.SDL.TTF.Management
-import Graphics.UI.SDL.TTF.Render
+
+type RectArray = Array Int Rect
 
 data Clip =
-	MouseOver
-	| MouseOut
-	| MouseDown
-	| MouseUp
-	deriving (Eq, Ord, Enum, Show)
+    MouseOver
+    | MouseOut
+    | MouseDown
+    | MouseUp
+    deriving (Eq, Ord, Enum, Show)
 
 data Button = Button { box :: Rect, clip :: Clip }
 
-screenWidth		=	640
-screenHeight	=	480
-screenBpp		=	32
+button :: Int -> Int -> Int -> Int -> Button
+button x y w h = Button { box=Rect { rectX=x, rectY=y, rectW=w, rectH=h }, clip=MouseOut }
+
+isInside :: Integral a => Rect -> a -> a -> Bool
+isInside (Rect rx ry rw rh) x y = (x' > rx) && (x' < rx + rw) && (y' > ry) && (y' < ry + rh)
+ where (x', y') = (fromIntegral x, fromIntegral y)
+
+handleEvent :: Button -> Event -> Button
+handleEvent button@Button { box=b } (MouseMotion x y _ _) = button { clip=clip' }
+ where clip' = if isInside b x y then MouseOver else MouseOut
+
+handleEvent button@Button { box=b, clip=c } (MouseButtonDown x y ButtonLeft) = button { clip=clip' } 
+ where clip' = if isInside b x y then MouseDown else c
+	
+handleEvent button@Button { box=b, clip=c } (MouseButtonUp x y ButtonLeft) = button { clip=clip' }
+ where clip' = if isInside b x y then MouseUp else c
+
+handleEvent button _ = button
+
+showButton :: Button -> RectArray -> Surface -> Surface -> IO Bool
+showButton Button { box=Rect {rectX=x,rectY=y}, clip=clip } clips buttonSheet screen =
+    applySurface x y buttonSheet screen $ Just clipRect
+ where clipRect = clips ! fromEnum clip
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
 
-setColorKey' Nothing s =	return s
-setColorKey' (Just (r, g, b)) surface	=	(mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
+setColorKey' Nothing s = return s
+setColorKey' (Just (r, g, b)) surface = (mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
 
 applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
-	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
+ where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-makeButton :: Int -> Int -> Int -> Int -> Button
-makeButton x y w h = Button { box=Rect { rectX=x, rectY=y, rectW=w, rectH=h }, clip=MouseOut }
+data AppConfig = AppConfig {
+    screen       :: Surface,
+    buttonSheet  :: Surface,
+    clips        :: RectArray,
+    screenWidth  :: Int,
+    screenHeight :: Int,
+    screenBpp    :: Int
+}
 
-isInside :: Rect -> Int -> Int -> Bool
-isInside Rect {rectX=rx,rectY=ry,rectW=rw,rectH=rh } x y = (x > rx) && (x < rx + rw) && (y > ry) && (y < ry + rh)  
+type AppState = StateT Button IO
+type AppEnv = ReaderT AppConfig AppState
 
-handleEvent :: Button -> Event -> Button
-handleEvent Button { box=b } (MouseMotion x y _ _) = Button { box=b, clip=clip' }
-	where clip'	= if isInside b (fromIntegral x) (fromIntegral y) then MouseOver else MouseOut
-	
-handleEvent Button { box=b, clip=c } (MouseButtonDown x y ButtonLeft) = Button { box=b, clip=clip' } 
-	where
-		isIn	=	isInside b (fromIntegral x) (fromIntegral y)
-		clip'	=	if isIn then MouseDown else c
-	
-handleEvent Button { box=b, clip=c } (MouseButtonUp x y ButtonLeft) = Button { box=b, clip=clip' }
-	where
-		isIn	=	isInside b (fromIntegral x) (fromIntegral y)
-		clip'	=	if isIn then MouseUp else c
+initEnv :: IO AppConfig
+initEnv = do
+    
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+    setCaption "Button Test" []
+        
+    buttonSheet <- loadImage "button.png" (Just (0x00, 0xff, 0xff))
+    
+    return $ AppConfig screen buttonSheet clips screenWidth screenHeight screenBpp
+    
+ where
+    screenWidth  = 640
+    screenHeight = 480
+    screenBpp    = 32
+    myButton = button 170 120 320 240
+    clips    = listArray (0, 3) [   Rect { rectX=0, rectY=0, rectW=320, rectH=240 },
+                                    Rect { rectX=320, rectY=0, rectW=320, rectH=240 },
+                                    Rect { rectX=0, rectY=240, rectW=320, rectH=240 },
+                                    Rect { rectX=320, rectY=240, rectW=320, rectH=240 }] :: RectArray
 
-handleEvent button _ = button
+loop :: AppEnv ()
+loop = do
 
-showButton :: Button -> Array Int Rect -> Surface -> Surface -> IO Bool
-showButton Button { box=Rect {rectX=x,rectY=y}, clip=clip } clips buttonSheet screen =
-		applySurface x y buttonSheet screen (Just clipRect)
-	where
-		clipIndex	=	fromEnum clip
-		clipRect	=	clips ! clipIndex
+    quit <- whileEvents $ \event -> do
+                but <- handleEvent' event <$> get -- <$> == fmap
+                put but
+    
+    screen      <- fmap screen ask
+    clips       <- fmap clips ask
+    buttonSheet <- fmap buttonSheet ask
+    button      <- get
+    
+    -- a local lambda so we don't have use liftIO for all the SDL actions used which are in IO.
+    liftIO $ do
+        bgColor  <- (mapRGB . surfaceGetPixelFormat) screen 0xff 0xff 0xff  
+        clipRect <- fmap Just $ getClipRect screen
+        fillRect screen clipRect bgColor
+        showButton button clips buttonSheet screen
+        Graphics.UI.SDL.flip screen
+    
+    unless quit loop
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-		screen	<-	setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
-		setCaption "Button Test" []
-			
-		buttonSheet		<-	loadImage "button.png" (Just (0x00, 0xff, 0xff))
-		
-		let render button = do
-			bgColor		<-	(mapRGB . surfaceGetPixelFormat) screen 0xff 0xff 0xff	
-			clipRect	<-	Just <$> (getClipRect screen)
-			fillRect screen clipRect bgColor
-			showButton button clips buttonSheet screen
-			Graphics.UI.SDL.flip screen
-		
-		--loop :: StateT Button IO ()
-		let loop		= do
-			button	<-	get
-				
-			event	<-	liftIO pollEvent
-			case event of
-				Quit	->	return ()
-				NoEvent	-> liftIO (render button) >> loop  
-				_		-> put (handleEvent button event) >> loop
-		
-		evalStateT loop myButton
-		
-		quit
-	where
-		myButton	=	makeButton 170 120 320 240
-		clips		=	listArray (0, 3) [	Rect { rectX=0, rectY=0, rectW=320, rectH=240 },
-											Rect { rectX=320, rectY=0, rectW=320, rectH=240 },
-											Rect { rectX=0, rectY=240, rectW=320, rectH=240 },
-											Rect { rectX=320, rectY=240, rectW=320, rectH=240 }] :: Array Int Rect
+ where
+    handleEvent' = Prelude.flip handleEvent
+    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
+    
+whileEvents :: (Event -> AppEnv ()) -> AppEnv Bool
+whileEvents act = do
+    event <- liftIO pollEvent
+    case event of
+        Quit -> return True
+        NoEvent -> return False
+        _       ->  do
+            act event
+            whileEvents act
+
+runLoop :: AppConfig -> Button -> IO ()
+runLoop = evalStateT . runReaderT loop
+
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
+    result <- TTFG.init
+    if not result
+        then putStr "Failed to init ttf\n"
+        else do
+            env <- initEnv
+            
+            runLoop env myButton
+                        
+            TTFG.quit
+
+ where myButton = button 170 120 320 240
