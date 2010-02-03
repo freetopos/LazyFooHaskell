@@ -106,7 +106,6 @@ initEnv = do
     screenWidth  = 640
     screenHeight = 480
     screenBpp    = 32
-    myButton = button 170 120 320 240
     clips    = listArray (0, 3) [   Rect { rectX=0, rectY=0, rectW=320, rectH=240 },
                                     Rect { rectX=320, rectY=0, rectW=320, rectH=240 },
                                     Rect { rectX=0, rectY=240, rectW=320, rectH=240 },
