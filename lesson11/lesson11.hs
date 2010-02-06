@@ -57,7 +57,7 @@ type AppEnv = ReaderT AppConfig IO
 initEnv :: IO AppConfig
 initEnv = do
 
-    screen <- setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
     setCaption "Monitor Music" []
     
     background <- loadImage "background.png" (Just (0x00, 0xff, 0xff))
