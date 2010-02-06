@@ -74,7 +74,7 @@ initEnv = do
     start      <- getTicks
     
     return (AppConfig screen background startStop font textColor, (start, True))    
- where textColor   =   Color 0xF0 0xFF 0xF0
+ where textColor = Color 0xF0 0xFF 0xF0
 
 loop :: AppEnv ()
 loop = do
@@ -90,7 +90,7 @@ loop = do
                                 put (start, True)
                     _ -> return ()
     
-    AppConfig screen  background startStop font textColor <- ask
+    AppConfig screen background startStop font textColor <- ask
     
     applySurface' 0 0 background screen Nothing
     applySurface' ((screenWidth - (surfaceGetWidth startStop)) `div` 2) 200 startStop screen Nothing
