@@ -26,7 +26,7 @@ module Timer (Timer, defaultTimer, start, stop, getTimerTicks, pause, unpause, i
     
     data Timer = Timer { startTicks :: Word32, pausedTicks :: Word32, paused :: Bool, started :: Bool }
     
-    defaultTimer	=	Timer { startTicks=0, pausedTicks=0, paused=False, started=False }
+    defaultTimer = Timer { startTicks=0, pausedTicks=0, paused=False, started=False }
     
     start :: Timer -> IO Timer
     start timer = SdlTime.getTicks >>= \ticks -> return $ timer { startTicks=ticks, started=True,paused=False }

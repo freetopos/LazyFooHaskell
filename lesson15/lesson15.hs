@@ -20,102 +20,130 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 -}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
 import Data.Word
-import Data.Array.IArray
-import Monad
 import Control.Monad
 import Control.Monad.State
-import Control.Applicative
+import Control.Monad.Reader
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
-import Graphics.UI.SDL.Color
 import Graphics.UI.SDL.Image
 
-import qualified Graphics.UI.SDL.TTF.General as TTFG
-import Graphics.UI.SDL.TTF.Management
-import Graphics.UI.SDL.TTF.Render
-
-import Graphics.UI.SDL.Mixer
 import Timer
 
-screenWidth		=	640
-screenHeight	=	480
-screenBpp		=	32
+screenWidth     = 640
+screenHeight    = 480
+screenBpp       = 32
+framesPerSecond = 20
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
 
-setColorKey' Nothing s =	return s
-setColorKey' (Just (r, g, b)) surface	=	(mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
+setColorKey' Nothing s = return s
+setColorKey' (Just (r, g, b)) surface = (mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
 
 applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
-	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
-
-isInside :: Rect -> Int -> Int -> Bool
-isInside Rect {rectX=rx,rectY=ry,rectW=rw,rectH=rh } x y = (x > rx) && (x < rx + rw) && (y > ry) && (y < ry + rh)  
+ where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
 type TimerState a = StateT Timer IO a
+data FrameRateTest = FrameRateTest {
+    fps         :: Timer,
+    updateTimer :: Timer,
+    frame       :: Int
+}
 
-framesPerSecond = 20
+data AppConfig = AppConfig {
+    screen :: Surface,
+    image  :: Surface
+}
 
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-				
-		result <- TTFG.init
-		if not result
-			then do
-				putStr "Failed to init ttf\n"
-				return ()
-			else do
-				screen	<-	setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
-				setCaption "Frame Rate Test" []
-				
-				
-				image	<-	loadImage "testing.png" Nothing--(Just (0x00, 0xff, 0xff))
-				
-								
-				let render = do
-					(fps, update, frame) <- get
-					
-					liftIO $ applySurface 0 0 image screen Nothing
-					
-					liftIO $ Graphics.UI.SDL.flip screen
-					
-					let frame'	=	frame + 1
-					ticks	<-	liftIO $ getTimerTicks update
-					if ticks > 1000
-						then do
-							avgPerSec	<-	((fromIntegral frame' /) . (/ 1000.0) . fromIntegral) <$> liftIO (getTimerTicks fps)
-							let caption	=	"Average Frames Per Second: " ++ show avgPerSec
-							liftIO $ setCaption caption []
-							update' <- liftIO $ start update
-							put (fps, update', frame')
-						else put (fps, update, frame')
-				
-				let loop = do
-					event				<-	liftIO pollEvent
-					case event of
-						Quit	->	return ()
-						NoEvent	-> render >> loop
-						_		-> loop
-				
-				update	<-	start defaultTimer
-				fps		<-	start defaultTimer
-				execStateT loop (fps, update, 0)
-				
-				--closeFont font
-				TTFG.quit
-		quit
-	where
-		textColor	=	Color 0 0 0
-		--secsPerFrame	=	fromIntegral $ 1000 `div` framesPerSecond
+type AppState = StateT FrameRateTest IO
+type AppEnv = ReaderT AppConfig AppState
+
+getFrame :: MonadState FrameRateTest m => m Int
+getFrame = liftM frame get
+
+putFrame :: MonadState FrameRateTest m => Int -> m ()
+putFrame frm = modify $ \s -> s { frame = frm }
+
+getFPS :: MonadState FrameRateTest m => m Timer
+getFPS = liftM fps get
+
+putFPS :: MonadState FrameRateTest m => Timer -> m ()
+putFPS timer = modify $ \s -> s { fps = timer }
+
+modifyFPS :: MonadState FrameRateTest m => (Timer -> m Timer) -> m ()
+modifyFPS act = getFPS >>= act >>= putFPS
+
+getUpdate :: MonadState FrameRateTest m => m Timer
+getUpdate = liftM updateTimer get
+
+putUpdate :: MonadState FrameRateTest m => Timer -> m ()
+putUpdate t = modify $ \s -> s { updateTimer = t }
+
+modifyUpdate :: MonadState FrameRateTest m => (Timer -> m Timer) -> m ()
+modifyUpdate act = getUpdate >>= act >>= putUpdate
+
+getScreen :: MonadReader AppConfig m => m Surface
+getScreen = liftM screen ask
+
+getImage :: MonadReader AppConfig m => m Surface
+getImage = liftM image ask
+
+initEnv :: IO (AppConfig, FrameRateTest)
+initEnv = do    
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+    setCaption "Frame Rate Test" []
+    
+    image <- loadImage "testing.png" Nothing--(Just (0x00, 0xff, 0xff))
+
+    fps    <- start defaultTimer
+    update <- start defaultTimer
+    return (AppConfig screen image, FrameRateTest fps update frame) 
+ where
+    frame = 0
+
+loop :: AppEnv ()
+loop = do
+    quit <- whileEvents $ \_ -> return ()
+    
+    image  <- getImage
+    screen <- getScreen
+    applySurface' 0 0 image screen Nothing
+    
+    liftIO $ Graphics.UI.SDL.flip screen
+    
+    frame <- fmap (+1) getFrame
+    putFrame frame    
+    ticks  <- liftIO . getTimerTicks =<< getUpdate
+    when (ticks > 1000) $ do
+        fps <- getFPS
+        liftIO $ do
+            avgPerSec <- ((fromIntegral frame /) . (/ 1000.0) . fromIntegral) `fmap` getTimerTicks fps
+            let caption = "Average Frames Per Second: " ++ show avgPerSec
+            setCaption caption []
+        modifyUpdate $ liftIO . start
+    
+    unless quit loop
+ where
+    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
+
+whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents act = do
+    event <- liftIO pollEvent
+    case event of
+        Quit -> return True
+        NoEvent -> return False
+        _       ->  do
+            act event
+            whileEvents act
+
+runLoop :: AppConfig -> FrameRateTest -> IO ()
+runLoop = evalStateT . runReaderT loop
+
+main = withInit [InitEverything] $ do -- withInit calls quit for us.    		
+    (env, state) <- initEnv
+    runLoop env state
