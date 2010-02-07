@@ -33,8 +33,6 @@ import Graphics.UI.SDL.Image
 import Graphics.UI.SDL.TTF
 import qualified Graphics.UI.SDL.TTF.General as TTFG
 
-import Graphics.UI.SDL.Mixer
-
 screenWidth  = 640
 screenHeight = 480
 screenBpp    = 32
