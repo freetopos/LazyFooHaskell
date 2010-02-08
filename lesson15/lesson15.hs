@@ -48,7 +48,6 @@ applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
  where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-type TimerState a = StateT Timer IO a
 data FrameRateTest = FrameRateTest {
     fps         :: Timer,
     updateTimer :: Timer,
