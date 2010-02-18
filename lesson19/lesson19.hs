@@ -33,10 +33,6 @@ import Graphics.UI.SDL
 
 import Graphics.UI.SDL.Image
 
-import qualified Graphics.UI.SDL.TTF.General as TTFG
-import Graphics.UI.SDL.TTF.Management
-import Graphics.UI.SDL.TTF.Render
-
 import Timer
 
 screenWidth  = 640
