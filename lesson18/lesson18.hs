@@ -66,15 +66,15 @@ instance Collidable Rect where
     intersects Rect {rectX=ax,rectY=ay,rectW=aw,rectH=ah } Rect {rectX=bx,rectY=by,rectW=bw,rectH=bh } =
         bottomA > topB && topA < bottomB && rightA > leftB && leftA < rightB
      where
-        leftA	=	ax
-        rightA	=	ax + aw
-        topA	=	ay
-        bottomA	=	ay + ah
+        leftA   = ax
+        rightA  = ax + aw
+        topA    = ay
+        bottomA = ay + ah
         
-        leftB	=	bx
-        rightB	=	bx + bw
-        topB	=	by
-        bottomB	=	by + bh
+        leftB   = bx
+        rightB  = bx + bw
+        topB    = by
+        bottomB = by + bh
 
 instance Collidable RectArray where
     --intersects :: RectArray -> RectArray -> Bool
@@ -89,10 +89,10 @@ makeDot x y = shiftBoxes $ Dot (x,y) newBox (0,0)
                            Rect 0 0 18 2, Rect 0 0 16 2, Rect 0 0 14 1, Rect 0 0 10 1, Rect 0 0 6 1]
 
 handleInput :: Event -> Dot -> Dot
-handleInput (KeyDown (Keysym SDLK_UP _ _)) d@Dot { vel=(dx,dy) }     = d { vel=(dx, dy - dotAccel) }
-handleInput (KeyDown (Keysym SDLK_DOWN _ _)) d@Dot { vel=(dx,dy) }   = d { vel=(dx, dy + dotAccel) }
-handleInput (KeyDown (Keysym SDLK_LEFT _ _)) d@Dot { vel=(dx,dy) }   = d { vel=(dx - dotAccel, dy) }
-handleInput (KeyDown (Keysym SDLK_RIGHT _ _)) d@Dot { vel=(dx,dy) }  = d { vel=(dx + dotAccel, dy) }
+handleInput (KeyDown (Keysym SDLK_UP _ _)) d@Dot { vel=(dx,dy) }    = d { vel=(dx, dy - dotAccel) }
+handleInput (KeyDown (Keysym SDLK_DOWN _ _)) d@Dot { vel=(dx,dy) }  = d { vel=(dx, dy + dotAccel) }
+handleInput (KeyDown (Keysym SDLK_LEFT _ _)) d@Dot { vel=(dx,dy) }  = d { vel=(dx - dotAccel, dy) }
+handleInput (KeyDown (Keysym SDLK_RIGHT _ _)) d@Dot { vel=(dx,dy) } = d { vel=(dx + dotAccel, dy) }
 
 handleInput (KeyUp (Keysym SDLK_UP _ _)) d@Dot { vel=(dx,dy) }    = d { vel=(dx, dy + dotAccel) }
 handleInput (KeyUp (Keysym SDLK_DOWN _ _)) d@Dot { vel=(dx,dy) }  = d { vel=(dx, dy - dotAccel) }
