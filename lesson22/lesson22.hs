@@ -20,189 +20,136 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 -}
-{-# LANGUAGE FlexibleInstances, FunctionalDependencies, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
-import Data.List
 import Data.Word
-import Data.Array.IArray
-import Monad
-import Control.Monad
+
 import Control.Monad.State
-import Control.Applicative
+import Control.Monad.Reader
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
-import Graphics.UI.SDL.Color
+
 import Graphics.UI.SDL.Image
 
-import qualified Graphics.UI.SDL.TTF.General as TTFG
-import Graphics.UI.SDL.TTF.Management
-import Graphics.UI.SDL.TTF.Render
-
-import Graphics.UI.SDL.Mixer
 import Timer
 
-screenWidth		=	640
-screenHeight	=	480
-screenBpp		=	32
+screenWidth  = 640
+screenHeight = 480
+screenBpp    = 32
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
 
-setColorKey' Nothing s =	return s
-setColorKey' (Just (r, g, b)) surface	=	(mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
+setColorKey' Nothing s = return s
+setColorKey' (Just (r, g, b)) surface = (mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
 
 applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
-	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
+ where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-isInside :: Rect -> Int -> Int -> Bool
-isInside Rect {rectX=rx,rectY=ry,rectW=rw,rectH=rh } x y = (x > rx) && (x < rx + rw) && (y > ry) && (y < ry + rh)  
+data AppData = AppData {
+    bgX    :: Int,
+    fps    :: Timer
+}
 
-newtype RectArray = RectArray { rectArray ::  [Rect] }
+data AppConfig = AppConfig {
+    screen     :: Surface,
+    background :: Surface,
+    dotSprite  :: Surface
+}
 
-data Dot = Dot { pos :: (Int, Int), vel :: (Int, Int) }
+type AppState = StateT AppData IO
+type AppEnv = ReaderT AppConfig AppState
 
-dotWidth	=	20
-dotHeight	=	20
+getFPS :: MonadState AppData m => m Timer
+getFPS = liftM fps get
 
-levelWidth	=	1280
-levelHeight	=	960
+putFPS :: MonadState AppData m => Timer -> m ()
+putFPS t = modify $ \s -> s { fps = t }
 
-defaultDot	=	Dot (0,0) (0,0)
- 
-class Collidable a b where
-	intersects :: a -> b -> Bool
+modifyFPSM :: MonadState AppData m => (Timer -> m Timer) -> m ()
+modifyFPSM act = getFPS >>= act >>= putFPS
 
-instance Collidable Rect Rect where
-	--intersects :: Rect -> Rect -> Bool
-	intersects Rect {rectX=ax,rectY=ay,rectW=aw,rectH=ah } Rect {rectX=bx,rectY=by,rectW=bw,rectH=bh }
-		| bottomA <= topB || topA >= bottomB	=	False
-		| rightA <= leftB || leftA >= rightB	=	False
-		| otherwise	=	True
-		--bottomA > topB && topA < bottomB && rightA > leftB && leftA < rightB
- 	 where
- 		leftA	=	ax
- 		rightA	=	ax + aw
- 		topA	=	ay
- 		bottomA	=	ay + ah
- 		
- 		leftB	=	bx
-	 	rightB	=	bx + bw
-	 	topB	=	by
-	 	bottomB	=	by + bh
+getBgX :: MonadState AppData m => m Int
+getBgX = liftM bgX get
 
-instance (Collidable a b) => Collidable [a] [b] where
-	intersects lhs rhs = any (\x -> any (intersects x) rhs) lhs
+putBgX :: MonadState AppData m => Int -> m ()
+putBgX t = modify $ \s -> s { bgX = t }
 
-instance Collidable RectArray RectArray where
-	--intersects :: Rect -> Rect -> Bool
-	intersects (RectArray lhs) (RectArray rhs) = intersects lhs rhs
+modifyBgX :: MonadState AppData m => (Int -> Int) -> m ()
+modifyBgX fn = fn `liftM` getBgX >>= putBgX
 
-distance :: Int -> Int -> Int -> Int -> Float
-distance x1 y1 x2 y2 = sqrt $ fromIntegral $ x' + y'
+getScreen :: MonadReader AppConfig m => m Surface
+getScreen = liftM screen ask
+
+getBg :: MonadReader AppConfig m => m Surface
+getBg = liftM background ask
+
+getDot :: MonadReader AppConfig m => m Surface
+getDot = liftM dotSprite ask
+
+initEnv :: IO (AppConfig, AppData)
+initEnv = do    
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+    setCaption "Background Test" []
+    
+    background <- loadImage "bg.png" Nothing
+    dot <- loadImage "dot.bmp" (Just (0x00, 0xff, 0xff))
+    fps <- start defaultTimer
+    
+    return (AppConfig screen background dot, AppData 0 fps) 
+
+loop :: AppEnv ()
+loop = do
+    
+    modifyFPSM $ liftIO . start
+    quit <- whileEvents $ \_ -> return ()
+    
+    background <- getBg
+    let backgroundW = surfaceGetWidth background
+    
+    modifyBgX $ Prelude.flip (-) 2
+    modifyBgX $ \bgX ->
+        if bgX <= -backgroundW then 0 else bgX
+    
+    bgX    <- getBgX
+    dot    <- getDot
+    screen <- getScreen
+    fps    <- getFPS
+    
+    liftIO $ do
+        applySurface bgX bgY background screen Nothing
+        applySurface (bgX + backgroundW) bgY background screen Nothing
+        applySurface 310 230 dot screen Nothing
+                
+        Graphics.UI.SDL.flip screen
+        
+        ticks <- getTimerTicks fps
+        when (ticks < secsPerFrame) $ do
+            delay $ secsPerFrame - ticks
+
+    unless quit loop
  where
- 	x'	=	(x2 - x1) ^ 2
- 	y'	=	(y2 - y1) ^ 2
+    bgY             = 0
+    framesPerSecond = 20
+    secsPerFrame    = 1000 `div` framesPerSecond
+    mapRGB'         = mapRGB . surfaceGetPixelFormat
+    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
 
-halfDotWidth	=	dotWidth `div` 2
-halfDotHeight	=	dotHeight `div` 2
+whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents act = do
+    event <- liftIO pollEvent
+    case event of
+        Quit -> return True
+        NoEvent -> return False
+        _       ->  do
+            act event
+            whileEvents act
 
-handleInput :: Dot -> Event -> Dot
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyDown (Keysym SDLK_UP _ _)) = Dot { pos=p,vel=(dx, dy - halfDotHeight) }
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyDown (Keysym SDLK_DOWN _ _)) = Dot { pos=p,vel=(dx, dy + halfDotHeight) }
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyDown (Keysym SDLK_LEFT _ _)) = Dot { pos=p,vel=(dx - halfDotWidth, dy) }
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyDown (Keysym SDLK_RIGHT _ _)) = Dot { pos=p,vel=(dx + halfDotWidth, dy) }
+runLoop :: AppConfig -> AppData -> IO ()
+runLoop = evalStateT . runReaderT loop
 
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyUp (Keysym SDLK_UP _ _)) = Dot { pos=p,vel=(dx, dy + halfDotHeight) }
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyUp (Keysym SDLK_DOWN _ _)) = Dot { pos=p,vel=(dx, dy - halfDotHeight) }
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyUp (Keysym SDLK_LEFT _ _)) = Dot { pos=p,vel=(dx + halfDotWidth, dy) }
-handleInput Dot { pos=p, vel=(dx,dy) } (KeyUp (Keysym SDLK_RIGHT _ _)) = Dot { pos=p,vel=(dx - halfDotWidth, dy) }
-
-handleInput d _ = d
-
-move :: Dot -> Dot
-move Dot { pos=(x,y), vel=v@(dx,dy) } = Dot { pos=(x'', y''), vel=v }
- where
-	(x', y')	=	(x + dx, y + dy)
-		
-	x''	=	if x' < 0 || (x' + dotWidth) > levelWidth then x else x'
-	
-	y''	=	if y' < 0 || (y' + dotHeight) > levelHeight then y else y'
-
-type Camera = Rect
-
-setCamera :: Dot -> Camera -> Camera
-setCamera Dot { pos=(x,y) } (Rect _ _ w h) = (Rect x'' y'' w h)
- where
- 	x'	=	(x + dotWidth `div` 2) - screenWidth `div` 2
- 	y'	=	(y + dotWidth `div` 2) - screenHeight `div` 2
- 	x''	=	min (levelWidth - w) $ max x' 0
- 	y''	=	min (levelHeight - h) $ max y' 0 
- 
-showDot Dot { pos=(x,y) } (Rect cx cy _ _) = applySurface (x - cx) (y - cy)
-
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-				
-		result <- TTFG.init
-		if not result
-			then do
-				putStr "Failed to init ttf\n"
-				return ()
-			else do
-				screen	<-	setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
-				setCaption "Background Test" []
-				
-				background	<-	loadImage "bg.png" Nothing
-				dot			<-	loadImage "dot.bmp" (Just (0x00, 0xff, 0xff))
-								
-				let render = do
-					(fps, bgX) <- get
-					
-					liftIO $ applySurface bgX bgY background screen Nothing
-					liftIO $ applySurface (bgX + surfaceGetWidth background) bgY background screen Nothing
-					liftIO $ applySurface 310 230 dot screen Nothing
-																														
-					liftIO $ Graphics.UI.SDL.flip screen
-					
-					ticks <- liftIO $ getTimerTicks fps
-					if ticks < secsPerFrame
-						then liftIO $ delay $ secsPerFrame - ticks
-						else return () --) :: StateT (Timer, Dot, Camera) IO ()
-				
-				let loop = do
-					(fps, bgX)	<-	get
-					event			<-	liftIO pollEvent					
-					case event of
-						Quit	->	return ()
-						NoEvent	->	do
-							let bgX'	=	bgX - 2
-							let bgX''	=	if bgX' <= -(surfaceGetWidth background) then 0 else bgX'
-							put (fps, bgX'')
-							render
-							(fps', x) <- get
-							fps'' <- liftIO $ start fps
-							put (fps'', x)
-							loop
-						_		-> loop
-				
-				fps		<-	start defaultTimer
-				execStateT loop (fps, 0)
-				
-				--closeFont font
-				TTFG.quit
-		quit
-	where
-		mapRGB'			=	mapRGB . surfaceGetPixelFormat
-		textColor		=	Color 0 0 0
-		framesPerSecond	=	20
-		secsPerFrame	=	1000 `div` framesPerSecond
-		bgY				=	0
+main = withInit [InitEverything] $ do -- withInit calls quit for us.result <- TTFG.init
+    (env, state) <- initEnv
+    runLoop env state
