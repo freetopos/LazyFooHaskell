@@ -20,16 +20,14 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 -}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, FunctionalDependencies, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
 import Data.Word
 import Data.Array.IArray
-import Monad
-import Control.Monad
+
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Applicative
 
 import Graphics.UI.SDL
 import Graphics.UI.SDL.Image
