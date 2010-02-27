@@ -194,7 +194,7 @@ loop = do
     
     unless quit loop
  where
-    mapRGB'         = mapRGB . surfaceGetPixelFormat
+    mapRGB' = mapRGB . surfaceGetPixelFormat
     applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
 
 whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
