@@ -132,6 +132,7 @@ initEnv = do
     
     return (AppConfig screen dot stick, AppData defaultDot fps) 
  where joyIndex = 0
+
 loop :: AppEnv ()
 loop = do
 
