@@ -20,165 +20,153 @@
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 	THE SOFTWARE.
 -}
-{-# LANGUAGE FlexibleInstances, FunctionalDependencies, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fglasgow-exts #-}
 module Main where
 
-import Data.List
 import Data.Word
-import Data.Array.IArray
-import Monad
-import Control.Monad
+
+import Foreign
+import Foreign.C.Types
+
+import Control.Monad.Reader
 import Control.Monad.State
-import Control.Applicative
 
 import Graphics.UI.SDL
-import Graphics.UI.SDL.General
-import Graphics.UI.SDL.Video
-import Graphics.UI.SDL.Rect
-import Graphics.UI.SDL.WindowManagement
-import Graphics.UI.SDL.Time
-import Graphics.UI.SDL.Events
-import Graphics.UI.SDL.Color
 import Graphics.UI.SDL.Image
+import Graphics.UI.SDL.Utilities as Util
 
-import qualified Graphics.UI.SDL.TTF.General as TTFG
-import Graphics.UI.SDL.TTF.Management
-import Graphics.UI.SDL.TTF.Render
-
-import Graphics.UI.SDL.Mixer
 import Timer
 
-screenWidth		=	640
-screenHeight	=	480
-screenBpp		=	32
+screenWidth  = 640
+screenHeight = 480
+screenBpp    = 32
+
+alphaOpaque = 255
+alphaTransparent = 0
+
+-- `SDL_GetKeyState' is not defined in Graphic.UI.SDL
+foreign import ccall unsafe "SDL_GetKeyState" sdlGetKeyState :: Ptr CInt -> IO (Ptr Word8)
+
+type KeyProc = SDLKey -> Bool
+-- this function comes from mokehehe's super nario bros: http://github.com/mokehehe/monao in the file "AppUtil.hs"
+getKeyState :: IO KeyProc
+getKeyState = alloca $ \numkeysPtr -> do
+    keysPtr <- sdlGetKeyState numkeysPtr
+    return $ \k -> (/= 0) $ unsafePerformIO $ (peekByteOff keysPtr $ fromIntegral $ Util.fromEnum k :: IO Word8)
 
 loadImage :: String -> Maybe (Word8, Word8, Word8) -> IO Surface
 loadImage filename colorKey = load filename >>= displayFormat >>= setColorKey' colorKey
 
-setColorKey' Nothing s =	return s
-setColorKey' (Just (r, g, b)) surface	=	(mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
+setColorKey' Nothing s = return s
+setColorKey' (Just (r, g, b)) surface = (mapRGB . surfaceGetPixelFormat) surface r g b >>= setColorKey surface [SrcColorKey] >> return surface
 
 applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
-	where offset	=	Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
+ where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-isInside :: Rect -> Int -> Int -> Bool
-isInside Rect {rectX=rx,rectY=ry,rectW=rw,rectH=rh } x y = (x > rx) && (x < rx + rw) && (y > ry) && (y < ry + rh)  
+data AppData = AppData {
+    alpha :: Word8,
+    fps   :: Timer
+}
 
-newtype RectArray = RectArray { rectArray ::  [Rect] }
-data Dot = Dot { pos :: (Int, Int), vel :: (Int, Int) }
+data AppConfig = AppConfig {
+    screen :: Surface,
+    front  :: Surface,
+    back   :: Surface
+}
 
-dotWidth	=	20
-dotHeight	=	20
+type AppState = StateT AppData IO
+type AppEnv = ReaderT AppConfig AppState
 
-levelWidth	=	1280
-levelHeight	=	960
+getFPS :: MonadState AppData m => m Timer
+getFPS = liftM fps get
 
-defaultDot	=	Dot (0,0) (0,0)
- 
-class Collidable a b where
-	intersects :: a -> b -> Bool
+putFPS :: MonadState AppData m => Timer -> m ()
+putFPS t = modify $ \s -> s { fps = t }
 
-instance Collidable Rect Rect where
-	--intersects :: Rect -> Rect -> Bool
-	intersects Rect {rectX=ax,rectY=ay,rectW=aw,rectH=ah } Rect {rectX=bx,rectY=by,rectW=bw,rectH=bh }
-		| bottomA <= topB || topA >= bottomB	=	False
-		| rightA <= leftB || leftA >= rightB	=	False
-		| otherwise	=	True
-		--bottomA > topB && topA < bottomB && rightA > leftB && leftA < rightB
- 	 where
- 		leftA	=	ax
- 		rightA	=	ax + aw
- 		topA	=	ay
- 		bottomA	=	ay + ah
- 		
- 		leftB	=	bx
-	 	rightB	=	bx + bw
-	 	topB	=	by
-	 	bottomB	=	by + bh
+modifyFPSM :: MonadState AppData m => (Timer -> m Timer) -> m ()
+modifyFPSM act = getFPS >>= act >>= putFPS
 
-instance (Collidable a b) => Collidable [a] [b] where
-	intersects lhs rhs = any (\x -> any (intersects x) rhs) lhs
+getAlpha :: MonadState AppData m => m Word8
+getAlpha = liftM alpha get
 
-instance Collidable RectArray RectArray where
-	--intersects :: Rect -> Rect -> Bool
-	intersects (RectArray lhs) (RectArray rhs) = intersects lhs rhs
+putAlpha :: MonadState AppData m => Word8 -> m ()
+putAlpha t = modify $ \s -> s { alpha = t }
 
-distance :: Int -> Int -> Int -> Int -> Float
-distance x1 y1 x2 y2 = sqrt $ fromIntegral $ x' + y'
+getScreen :: MonadReader AppConfig m => m Surface
+getScreen = liftM screen ask
+
+getFront :: MonadReader AppConfig m => m Surface
+getFront = liftM front ask
+
+getBack :: MonadReader AppConfig m => m Surface
+getBack = liftM back ask
+
+initEnv :: IO (AppConfig, AppData)
+initEnv = do    
+    screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
+    setCaption "Alpha Test" []
+    
+    back  <- loadImage "fadein.png" Nothing
+    front <- loadImage "fadeout.png" Nothing
+    fps   <- start defaultTimer
+    
+    return (AppConfig screen front back, AppData alpha fps) 
+ where alpha = alphaOpaque
+
+loop :: AppEnv ()
+loop = do
+
+    modifyFPSM $ liftIO . start
+    quit <- whileEvents $ \_ -> return ()
+    
+    keyState <- liftIO getKeyState
+    
+    when (keyState SDLK_UP) $ do
+        alpha <- getAlpha
+        when (alpha < alphaOpaque) $ do
+            putAlpha (alpha + 5)
+    
+    when (keyState SDLK_DOWN) $ do
+        alpha <- getAlpha
+        when (alpha > alphaTransparent) $ do
+            putAlpha (alpha - 5)
+    
+    fps    <- getFPS
+    alpha  <- getAlpha
+    front  <- getFront
+    back   <- getBack
+    screen <- getScreen    
+    liftIO $ do
+        setAlpha front [SrcAlpha] alpha
+        
+        applySurface 0 0 back screen Nothing
+        applySurface 0 0 front screen Nothing
+                
+        Graphics.UI.SDL.flip screen
+        
+        ticks <- getTimerTicks fps
+        when (ticks < secsPerFrame) $ do
+            delay $ secsPerFrame - ticks
+
+    unless quit loop
  where
- 	x'	=	(x2 - x1) ^ 2
- 	y'	=	(y2 - y1) ^ 2
+    framesPerSecond = 20
+    secsPerFrame    = 1000 `div` framesPerSecond
 
-halfDotWidth	=	dotWidth `div` 2
-halfDotHeight	=	dotHeight `div` 2
+whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents act = do
+    event <- liftIO pollEvent
+    case event of
+        Quit -> return True
+        NoEvent -> return False
+        _       ->  do
+            act event
+            whileEvents act
 
-move :: Dot -> Dot
-move Dot { pos=(x,y), vel=v@(dx,dy) } = Dot { pos=(x'', y''), vel=v }
- where
-	(x', y')	=	(x + dx, y + dy)
-		
-	x''	=	if x' < 0 || (x' + dotWidth) > screenWidth then x else x'
-	
-	y''	=	if y' < 0 || (y' + dotHeight) > screenHeight then y else y'
+runLoop :: AppConfig -> AppData -> IO ()
+runLoop = evalStateT . runReaderT loop
 
-showDot Dot { pos=(x,y) } = applySurface x y
-
-main =
-	do
-		Graphics.UI.SDL.General.init [InitEverything]
-		result <- TTFG.init
-		
-		if not result
-			then do
-				putStr "Failed to init ttf\n"
-				return ()
-			else do
-				screen	<-	setVideoMode screenWidth screenHeight screenBpp [HWSurface, DoubleBuf, AnyFormat]
-				setCaption "Alpha Test" []
-				
-				back	<-	loadImage "fadein.png" Nothing
-				front	<-	loadImage "fadeout.png" Nothing
-								
-				let render fps alpha = do
-					setAlpha front [SrcAlpha] alpha
-					
-					applySurface 0 0 back screen Nothing
-					applySurface 0 0 front screen Nothing
-					
-					Graphics.UI.SDL.flip screen
-					
-					ticks <- getTimerTicks fps
-					if ticks < secsPerFrame
-						then delay $ secsPerFrame - ticks
-						else return ()
-
-				let loop alpha fps = do
-					event	<-	pollEvent					
-					case event of
-						Quit	->	return ()
-						KeyDown (Keysym SDLK_ESCAPE _ _)->	return ()
-						KeyDown (Keysym SDLK_UP _ _)	-> do
-							let alpha' = if alpha < alphaOpaque then alpha + 5 else alpha
-							loop alpha' fps
-						KeyDown (Keysym SDLK_DOWN _ _)	->	do
-							let alpha' = if alpha > alphaTransparent then alpha - 5 else alpha
-							loop alpha' fps
-						NoEvent							->	do
-							render fps  alpha
-							fps' <- start fps
-							loop alpha fps'		
-						_								->	loop alpha fps
-				
-				fps		<-	start defaultTimer
-				
-				loop alphaOpaque fps
-				TTFG.quit
-		quit
-	where
-		mapRGB'			=	mapRGB . surfaceGetPixelFormat
-		textColor		=	Color 0xFF 0xFF 0xFF
-		framesPerSecond	=	20
-		secsPerFrame	=	1000 `div` framesPerSecond
-		alphaOpaque		=	255
-		alphaTransparent=	0
+main = withInit [InitEverything] $ do -- withInit calls quit for us.
+    (env, state) <- initEnv
+    runLoop env state
