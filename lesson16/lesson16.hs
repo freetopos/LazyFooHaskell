@@ -73,10 +73,10 @@ handleInput _ d = d
 move :: Dot -> Dot
 move dot@Dot { pos=(x,y), vel=(dx,dy) } = dot { pos=(x'', y'') } 
  where
-    x'	=	x + dx
-    y'	=	y + dy
-    x''	=	if x' < 0 || (x' + dotWidth) > screenWidth then x else x' 
-    y''	=	if y' < 0 || (y' + dotHeight) > screenHeight then y else y'
+    x'	= x + dx
+    y'	= y + dy
+    x''	= if x' < 0 || (x' + dotWidth) > screenWidth then x else x' 
+    y''	= if y' < 0 || (y' + dotHeight) > screenHeight then y else y'
 
 showDot Dot { pos=(x,y) } = applySurface x y 
 
