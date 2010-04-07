@@ -160,7 +160,7 @@ loop = do
     secsPerFrame    = 1000 `div` framesPerSecond
     applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
 
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of
@@ -176,5 +176,3 @@ runLoop = evalStateT . runReaderT loop
 main = withInit [InitEverything] $ do -- withInit calls quit for us.
     (env, state) <- initEnv
     runLoop env state
-
-
