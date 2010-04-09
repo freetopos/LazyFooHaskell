@@ -155,9 +155,6 @@ loop = do
         Graphics.UI.SDL.flip screen
     
     unless quit loop
- where
-    framesPerSecond = 20
-    secsPerFrame    = 1000 `div` framesPerSecond
 
 whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
