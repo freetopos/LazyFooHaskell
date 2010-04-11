@@ -27,7 +27,6 @@ import Data.Word
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Applicative
 
 import Graphics.UI.SDL
 import Graphics.UI.SDL.Image
@@ -106,7 +105,7 @@ loop = do
         applySurface ((screenWidth - (surfaceGetWidth startStop)) `div` 2) 200 startStop screen Nothing
         applySurface ((screenWidth - (surfaceGetWidth pauseMessage)) `div` 2) 250 pauseMessage screen Nothing
        
-        time <- ((/ 1000.0) . fromIntegral) <$> getTimerTicks timer
+        time <- ((/ 1000.0) . fromIntegral) `liftM` getTimerTicks timer
         seconds <-  renderTextSolid font ("Timer: " ++ show time) textColor
         
         applySurface ((screenWidth - (surfaceGetWidth seconds)) `div` 2) 0 seconds screen Nothing
@@ -114,10 +113,9 @@ loop = do
         Graphics.UI.SDL.flip screen
     
     unless quit loop
- where
-    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
+ where applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
     
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

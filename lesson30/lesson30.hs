@@ -148,7 +148,7 @@ loop = do
     quit <- whileEvents $ \_ -> return ()    
     unless quit loop
 
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

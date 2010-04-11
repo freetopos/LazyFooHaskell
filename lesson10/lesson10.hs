@@ -37,6 +37,10 @@ import Graphics.UI.SDL.TTF
 import Graphics.UI.SDL.Utilities as Util
 import qualified Graphics.UI.SDL.TTF.General as TTFG
 
+screenWidth  = 640
+screenHeight = 480
+screenBpp    = 32
+
 -- `SDL_GetKeyState' is not defined in Graphic.UI.SDL
 foreign import ccall unsafe "SDL_GetKeyState" sdlGetKeyState :: Ptr CInt -> IO (Ptr Word8)
 
@@ -63,10 +67,7 @@ data AppConfig = AppConfig {
     up           :: Surface,
     down         :: Surface,
     left         :: Surface,
-    right        :: Surface,
-    screenWidth  :: Int,
-    screenHeight :: Int,
-    screenBpp    :: Int
+    right        :: Surface
 }
 
 type AppEnv = ReaderT AppConfig IO
@@ -84,13 +85,9 @@ initEnv = do
     left       <- renderTextSolid font "Left" textColor
     right      <- renderTextSolid font "Right" textColor
     
-    return $ AppConfig screen background up down left right screenWidth screenHeight screenBpp
+    return $ AppConfig screen background up down left right
     
- where
-    screenWidth  = 640
-    screenHeight = 480
-    screenBpp    = 32
-    textColor    = Color 0 0 0
+ where textColor = Color 0 0 0
     
 loop :: AppEnv ()
 loop = do
@@ -99,9 +96,7 @@ loop = do
     
     screen       <- fmap screen ask
     background   <- fmap background ask
-    screenWidth  <- fmap screenWidth ask
-    screenHeight <- fmap screenHeight ask
-    
+        
     applySurface' 0 0 background screen Nothing
     
     keyState <- liftIO getKeyState
@@ -130,10 +125,9 @@ loop = do
     
     unless quit loop
 
- where
-    applySurface' x y src dst clip = liftIO $ applySurface x y src dst clip
+ where applySurface' x y src dst clip = liftIO $ applySurface x y src dst clip
 
-whileEvents :: (Event -> AppEnv ()) -> AppEnv Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

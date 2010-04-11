@@ -178,7 +178,7 @@ loop = do
                                   Rect (fooWidth * 2) fooHeight fooWidth fooHeight, Rect (fooWidth * 3) fooHeight fooWidth fooHeight] :: Array Int Rect
     
 
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

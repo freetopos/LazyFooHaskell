@@ -230,7 +230,7 @@ loop = do
     mapRGBIO s r g b = liftIO (mapRGB' s r g b)
     applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
 
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

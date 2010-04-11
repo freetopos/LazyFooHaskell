@@ -22,7 +22,6 @@
 -}
 module Main where
 
-import Control.Applicative
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
@@ -32,8 +31,10 @@ import Data.Array.IArray
 
 import Graphics.UI.SDL
 import Graphics.UI.SDL.Image
-import Graphics.UI.SDL.TTF
-import qualified Graphics.UI.SDL.TTF.General as TTFG
+
+screenWidth  = 640
+screenHeight = 480
+screenBpp    = 32
 
 type RectArray = Array Int Rect
 
@@ -83,61 +84,48 @@ applySurface x y src dst clip = blitSurface src clip dst offset
 data AppConfig = AppConfig {
     screen       :: Surface,
     buttonSheet  :: Surface,
-    clips        :: RectArray,
-    screenWidth  :: Int,
-    screenHeight :: Int,
-    screenBpp    :: Int
+    clips        :: RectArray
 }
 
 type AppState = StateT Button IO
 type AppEnv = ReaderT AppConfig AppState
 
 initEnv :: IO AppConfig
-initEnv = do
-    
+initEnv = do    
     screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
     setCaption "Button Test" []
         
-    buttonSheet <- loadImage "button.png" (Just (0x00, 0xff, 0xff))
+    buttonSheet <- loadImage "button.png" $ Just (0x00, 0xff, 0xff)
     
-    return $ AppConfig screen buttonSheet clips screenWidth screenHeight screenBpp
-    
- where
-    screenWidth  = 640
-    screenHeight = 480
-    screenBpp    = 32
-    clips    = listArray (0, 3) [   Rect { rectX=0, rectY=0, rectW=320, rectH=240 },
-                                    Rect { rectX=320, rectY=0, rectW=320, rectH=240 },
-                                    Rect { rectX=0, rectY=240, rectW=320, rectH=240 },
-                                    Rect { rectX=320, rectY=240, rectW=320, rectH=240 }] :: RectArray
+    return $ AppConfig screen buttonSheet clips
+ where clips = listArray (0, 3) [Rect { rectX=0, rectY=0, rectW=320, rectH=240 },
+                                 Rect { rectX=320, rectY=0, rectW=320, rectH=240 },
+                                 Rect { rectX=0, rectY=240, rectW=320, rectH=240 },
+                                 Rect { rectX=320, rectY=240, rectW=320, rectH=240 }] :: RectArray
 
 loop :: AppEnv ()
 loop = do
 
-    quit <- whileEvents $ \event -> do
-                but <- handleEvent' event <$> get -- <$> == fmap
-                put but
+    quit <- whileEvents $ modify . handleEvent'
     
-    screen      <- fmap screen ask
-    clips       <- fmap clips ask
-    buttonSheet <- fmap buttonSheet ask
+    screen      <- screen `liftM` ask
+    clips       <- clips `liftM` ask
+    buttonSheet <- buttonSheet `liftM` ask
     button      <- get
     
     -- a local lambda so we don't have use liftIO for all the SDL actions used which are in IO.
     liftIO $ do
         bgColor  <- (mapRGB . surfaceGetPixelFormat) screen 0xff 0xff 0xff  
-        clipRect <- fmap Just $ getClipRect screen
+        clipRect <- Just `liftM` getClipRect screen
         fillRect screen clipRect bgColor
         showButton button clips buttonSheet screen
         Graphics.UI.SDL.flip screen
     
     unless quit loop
 
- where
-    handleEvent' = Prelude.flip handleEvent
-    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
-    
-whileEvents :: (Event -> AppEnv ()) -> AppEnv Bool
+ where handleEvent' = Prelude.flip handleEvent
+
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of
@@ -151,14 +139,6 @@ runLoop :: AppConfig -> Button -> IO ()
 runLoop = evalStateT . runReaderT loop
 
 main = withInit [InitEverything] $ do -- withInit calls quit for us.
-    result <- TTFG.init
-    if not result
-        then putStr "Failed to init ttf\n"
-        else do
-            env <- initEnv
-            
-            runLoop env myButton
-                        
-            TTFG.quit
-
+    env <- initEnv
+    runLoop env myButton
  where myButton = button 170 120 320 240

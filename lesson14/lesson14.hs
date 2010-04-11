@@ -52,7 +52,7 @@ applySurface :: Int -> Int -> Surface -> Surface -> Maybe Rect -> IO Bool
 applySurface x y src dst clip = blitSurface src clip dst offset
  where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
-data FrameRateTest = FrameRateTest {
+data AppData = AppData {
     fps   :: Timer,
     frame :: Int,
     cap   :: Bool
@@ -64,29 +64,29 @@ data AppConfig = AppConfig {
     message    :: Surface
 }
 
-type AppState = StateT FrameRateTest IO
+type AppState = StateT AppData IO
 type AppEnv = ReaderT AppConfig AppState
 
-getFrame :: MonadState FrameRateTest m => m Int
+getFrame :: MonadState AppData m => m Int
 getFrame = liftM frame get
 
-getCap :: MonadState FrameRateTest m => m Bool
+getCap :: MonadState AppData m => m Bool
 getCap = liftM cap get
 
-getFPS :: MonadState FrameRateTest m => m Timer
+getFPS :: MonadState AppData m => m Timer
 getFPS = liftM fps get
 
-putFPS :: MonadState FrameRateTest m => Timer -> m ()
+putFPS :: MonadState AppData m => Timer -> m ()
 putFPS timer = modify $ \s -> s { fps = timer }
 
-putFrame :: MonadState FrameRateTest m => Int -> m ()
+putFrame :: MonadState AppData m => Int -> m ()
 putFrame frm = modify $ \s -> s { frame = frm }
 
-modifyFPS :: MonadState FrameRateTest m => (Timer -> m Timer) -> m ()
+modifyFPS :: MonadState AppData m => (Timer -> m Timer) -> m ()
 modifyFPS act = getFPS >>= act >>= putFPS
 
 -- This commented section is meant to be a more general way of implemenating modifyFPS
-----withFPS :: (MonadState FrameRateTest m, MonadIO m) => StateT Timer IO a -> m a
+----withFPS :: (MonadState AppData m, MonadIO m) => StateT Timer IO a -> m a
 --withFPS :: StateT Timer IO a -> AppEnv a
 --withFPS act = do
 --    state <- get
@@ -100,7 +100,7 @@ modifyFPS act = getFPS >>= act >>= putFPS
 --    s' <- act s
 --    put s'
 
-initEnv :: IO (AppConfig, FrameRateTest)
+initEnv :: IO (AppConfig, AppData)
 initEnv = do
 
     screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
@@ -112,7 +112,7 @@ initEnv = do
     
     myTimer <- start defaultTimer
     
-    return (AppConfig screen background message, FrameRateTest myTimer frame cap) 
+    return (AppConfig screen background message, AppData myTimer frame cap) 
  where
     cap   = True
     frame = 0
@@ -153,10 +153,10 @@ loop = do
 
     applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
 
-    toggleCap :: FrameRateTest -> FrameRateTest
+    toggleCap :: AppData -> AppData
     toggleCap frt = frt { cap = not $ cap frt }
 
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of
@@ -166,7 +166,7 @@ whileEvents act = do
             act event
             whileEvents act
 
-runLoop :: AppConfig -> FrameRateTest -> IO ()
+runLoop :: AppConfig -> AppData -> IO ()
 runLoop = evalStateT . runReaderT loop
 
 main = withInit [InitEverything] $ do -- withInit calls quit for us.

@@ -133,7 +133,7 @@ loop = do
     unless quit loop
  where handleEvents' e w = liftIO $ handleEvents e w
 
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

@@ -104,10 +104,9 @@ loop = do
     liftIO $ Graphics.UI.SDL.flip screen
     unless quit loop
 
- where
-    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
+ where applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
     
-whileEvents :: (MonadIO m) => (Event -> m ()) -> m Bool
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
 whileEvents act = do
     event <- liftIO pollEvent
     case event of

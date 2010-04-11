@@ -34,6 +34,10 @@ import Graphics.UI.SDL.Image
 import Graphics.UI.SDL.TTF
 import qualified Graphics.UI.SDL.TTF.General as TTFG
 
+screenWidth  = 640
+screenHeight = 480
+screenBpp    = 32
+
 data MessageDir = MessageDir {
     upMessage    :: Surface,
     downMessage  :: Surface,
@@ -44,10 +48,7 @@ data MessageDir = MessageDir {
 data AppConfig = AppConfig {
     screen       :: Surface,
     background   :: Surface,
-    messageDir   :: MessageDir,
-    screenWidth  :: Int,
-    screenHeight :: Int,
-    screenBpp    :: Int
+    messageDir   :: MessageDir
 }
 
 type AppState = StateT (Maybe Surface) IO
@@ -67,8 +68,7 @@ applySurface x y src dst clip = blitSurface src clip dst offset
  where offset = Just Rect { rectX = x, rectY = y, rectW = 0, rectH = 0 }
 
 initEnv :: IO AppConfig
-initEnv = do
-    
+initEnv = do    
     screen <- setVideoMode screenWidth screenHeight screenBpp [SWSurface]
     setCaption "Press an Arrow Key" []
     
@@ -83,22 +83,26 @@ initEnv = do
     applySurface 0 0 background screen Nothing
     
     let msgDir = MessageDir upMessage downMessage leftMessage rightmessage
-    return $ AppConfig screen background msgDir screenWidth screenHeight screenBpp
- where
-    textColor    = Color 0 0 0
-    screenWidth  = 640
-    screenHeight = 480
-    screenBpp    = 32
+    return $ AppConfig screen background msgDir
+ where textColor    = Color 0 0 0
 
 loop :: AppEnv ()
 loop = do
     
-    quit <- whileEvents
+    quit <- whileEvents $ \event -> do
+        case event of
+            (KeyDown (Keysym key _ _)) -> do
+                mdir  <- messageDir `liftM` ask
+                case key of
+                    SDLK_UP    -> put $ Just $ upMessage mdir
+                    SDLK_DOWN  -> put $ Just $ downMessage mdir
+                    SDLK_LEFT  -> put $ Just $ leftMessage mdir
+                    SDLK_RIGHT -> put $ Just $ rightmessage mdir
+                    _          -> put Nothing
+            _ -> return ()
     
-    screen       <- fmap screen ask
-    background   <- fmap background ask
-    screenWidth  <- fmap screenWidth ask
-    screenHeight <- fmap screenHeight ask
+    screen       <- screen `liftM` ask
+    background   <- background `liftM` ask
     msg          <- get
     
     case msg of
@@ -112,25 +116,17 @@ loop = do
     
     unless quit loop
 
- where
-    applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
- 	
-whileEvents :: AppEnv Bool
-whileEvents = do
-    mdir  <- fmap messageDir ask
+ where applySurface' x y src dst clip = liftIO (applySurface x y src dst clip)
+
+whileEvents :: MonadIO m => (Event -> m ()) -> m Bool
+whileEvents act = do
     event <- liftIO pollEvent
     case event of
         Quit -> return True
-        (KeyDown (Keysym key _ _)) -> do
-            case key of
-            	SDLK_UP    -> put $ Just $ upMessage mdir
-            	SDLK_DOWN  -> put $ Just $ downMessage mdir
-            	SDLK_LEFT  -> put $ Just $ leftMessage mdir
-            	SDLK_RIGHT -> put $ Just $ rightmessage mdir
-            	_          -> put Nothing
-            return False
         NoEvent -> return False
-        _       ->  whileEvents
+        _       ->  do
+            act event
+            whileEvents act
 
 main = withInit [InitEverything] $ do -- withInit calls quit for us.
     

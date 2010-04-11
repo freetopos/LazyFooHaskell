@@ -44,8 +44,8 @@ main = withInit [InitEverything] $ do -- withInit calls quit for us.
     Graphics.UI.SDL.flip screen
     
     delay 2000
- where
-    screenWidth  = 640
-    screenHeight = 480
-    screenBpp    = 32
+    
+ where screenWidth  = 640
+       screenHeight = 480
+       screenBpp    = 32
 
