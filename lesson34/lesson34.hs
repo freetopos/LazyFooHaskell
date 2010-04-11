@@ -20,6 +20,12 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 -}
+
+{-
+    WARNING: In this program we have video functions running in seperate threads.
+    This is for demonstrative purposes only. You should never in a real application
+    have video functions running in seperate threads.
+-}
 module Main where
 
 import System.IO.Unsafe
@@ -137,7 +143,6 @@ main = withInit [InitEverything] $ do -- withInit calls quit for us.
             loop
  where textColor = Color 255 255 255
 
---- BEGIN_NOTE
 -- This section of code is copied from http://www.haskell.org/ghc/staging/docs/latest/html/libraries/base-4.2.0.0/Control-Concurrent.html#11
 -- These helper functions allows for the main thread to wait for a child thread to finish.
 children :: MVar [MVar ()]
@@ -159,4 +164,3 @@ forkChild io = do
     childs <- takeMVar children
     putMVar children (mvar:childs)
     forkIO (io `finally` putMVar mvar ())
--- END_NOTE
