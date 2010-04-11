@@ -20,7 +20,6 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 -}
-{-# LANGUAGE FlexibleContexts #-}
 {-
     WARNING: In this program we have video functions running in seperate threads.
     This is for demonstrative purposes only. You should never in a real application
@@ -90,7 +89,7 @@ condWait (Cond cond) (Mutex mutex) = do
     putMVar mutex () -- release lock
     tryTakeMVar cond -- make sure cond is empty 
     takeMVar cond    -- wait for signal
-    tryTakeMVar cond -- make sure cond is empty next time condWait is called.
+    --tryTakeMVar cond -- make sure cond is empty next time condWait is called.
     takeMVar mutex   -- re-acquire lock
 
 condSignal :: Cond -> IO ()
