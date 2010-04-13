@@ -62,6 +62,9 @@ data AppConfig = AppConfig {
 type AppState = StateT Timer IO
 type AppEnv = ReaderT AppConfig AppState
 
+modifyM :: MonadState s m => (s -> m s) -> m ()
+modifyM act = get >>= act >>= put
+
 initEnv :: IO (AppConfig, Timer)
 initEnv = do
 
@@ -83,17 +86,15 @@ loop = do
     quit <- whileEvents $ \event -> do
                 case event of
                     KeyDown (Keysym SDLK_s _ _) -> do
-                        timer  <- get                            
-                        timer' <- liftIO $ if isStarted timer
-                                            then return $ stop timer
-                                            else start timer
-                        put timer'
+                        modifyM $ \timer -> liftIO $
+                            if isStarted timer
+                                then return $ stop timer
+                                else start timer
                     KeyDown (Keysym SDLK_p _ _) -> do
-                        timer  <- get
-                        timer' <- liftIO $ if isPaused timer
-                                            then unpause timer
-                                            else Timer.pause timer
-                        put timer'
+                        modifyM $ \timer -> liftIO $
+                            if isPaused timer
+                                then unpause timer
+                                else Timer.pause timer
                     _ -> return ()
     
     AppConfig screen background startStop pauseMessage font textColor <- ask    
